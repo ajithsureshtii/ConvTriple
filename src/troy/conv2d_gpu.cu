@@ -11,7 +11,11 @@ namespace TROY {
 static unsigned char ALICE = 1;
 static unsigned char BOB   = 2;
 
-constexpr size_t MAX_BATCHSIZE = 10;
+#ifdef CONV_MAX_BATCH_SIZE
+constexpr size_t MAX_BATCHSIZE = CONV_MAX_BATCH_SIZE;
+#else
+constexpr size_t MAX_BATCHSIZE = 16;
+#endif
 
 troy::HeContextPointer setup() {
     using namespace troy;
@@ -32,7 +36,7 @@ troy::HeContextPointer setup() {
 
 void conv2d(IO::NetIO** ios, int party, const INT_TYPE* a, const INT_TYPE* b, INT_TYPE* c,
             size_t bs, size_t ic, size_t ih, size_t iw, size_t kh, size_t kw, size_t oc,
-            size_t stride, size_t padding, bool mod_switch, int factor) {
+            size_t stride, size_t padding, bool mod_switch, int factor, bool is_ab) {
     auto start = measure::now();
 
     vector<INT_TYPE> dest;
@@ -58,11 +62,21 @@ void conv2d(IO::NetIO** ios, int party, const INT_TYPE* a, const INT_TYPE* b, IN
 
     for (int i = 0; i < factor; ++i) {
 #if REVERSE_GPU == 0
-        conv2d_ab2(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch, ic, ih,
-                   iw, kh, kw, oc, stride, mod_switch);
+        if (is_ab) {
+            conv2d_ab(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch, ic, ih,
+                      iw, kh, kw, oc, stride, mod_switch);
+        } else {
+            conv2d_ab2(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch, ic, ih,
+                       iw, kh, kw, oc, stride, mod_switch);
+        }
 #else
-        conv2d_ab2_reverse(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch,
-                           ic, ih, iw, kh, kw, oc, stride, mod_switch);
+        if (is_ab) {
+            conv2d_ab_reverse(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch,
+                              ic, ih, iw, kh, kw, oc, stride, mod_switch);
+        } else {
+            conv2d_ab2_reverse(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch,
+                               ic, ih, iw, kh, kw, oc, stride, mod_switch);
+        }
 #endif
     }
 
@@ -229,8 +243,8 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
     size_t oh = ih - kh + 1;
     size_t ow = iw - kw + 1;
 
-    linear::Conv2dHelper helper(bs, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                linear::MatmulObjective::EncryptLeft);
+    linear::Conv2dHelper helper_enc(bs, ic, oc, ih, iw, kh, kw, POLY_MOD,
+                                    linear::MatmulObjective::EncryptLeft);
 
     KeyGenerator keygen(he);
     Encryptor encryptor(he);
@@ -238,93 +252,101 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
     Evaluator evaluator(he);
     Decryptor decryptor(he, keygen.secret_key());
 
-    if (party == ALICE) {
+    auto ntt = measure::now();
+    linear::Plain2d w_encoded
+        = helper_enc.encode_weights_ring2k(encoder, w, std::nullopt, false, evaluator, true);
+    double ntt_time = std::chrono::duration<double, std::milli>(measure::now() - ntt).count();
+    std::cerr << "P" << party - 1 << ": CONV NTT preprocessing time[s]: " << ntt_time / 1000.0
+              << "\n";
+
+    [[maybe_unused]] size_t size = 0;
+    for (size_t cur = 0; cur < bs;) {
+        auto batch_size = std::min(bs - cur, MAX_BATCHSIZE);
+        linear::Conv2dHelper helper(batch_size, ic, oc, ih, iw, kh, kw, POLY_MOD,
+                                    linear::MatmulObjective::EncryptLeft);
+        auto x_offset = ih * iw * ic * cur;
+
+        vector<INT_TYPE> R = random_polynomial(batch_size * oc * oh * ow);
+        linear::Plain2d R_encoded = helper.encode_outputs_ring2k(encoder, R.data(), std::nullopt);
+
         linear::Cipher2d x_encrypted
-            = helper.encrypt_inputs_ring2k(encryptor, encoder, x, std::nullopt);
+            = helper.encrypt_inputs_ring2k(encryptor, encoder, x + x_offset, std::nullopt);
 
-        std::stringstream a1_serialized;
-        x_encrypted.save(a1_serialized, he);
-        vector<INT_TYPE> R1 = random_polynomial(bs * oc * oh * ow);
+        std::stringstream x_serialized;
+        x_encrypted.save(x_serialized, he);
 
-        linear::Plain2d w_encoded  = helper.encode_weights_ring2k(encoder, w, std::nullopt, false);
-        linear::Plain2d R1_encoded = helper.encode_outputs_ring2k(encoder, R1.data(), std::nullopt);
+        std::stringstream received_x_serialized;
+        if (party == ALICE) {
+            send(ios, x_serialized);
+            received_x_serialized = recv(ios);
+        } else {
+            received_x_serialized = recv(ios);
+            send(ios, x_serialized);
+        }
 
-        send(ios, a1_serialized);
-        auto a2_serialized = recv(ios);
-        auto a2_encrypted  = linear::Cipher2d::load_new(a2_serialized, he);
+        auto other_x_encrypted = linear::Cipher2d::load_new(received_x_serialized, he);
 
-        auto m1_encrypted = helper.conv2d(evaluator, a2_encrypted, w_encoded);
-        m1_encrypted.sub_plain_inplace(evaluator, R1_encoded);
+        linear::Cipher2d y_encrypted = helper.conv2d(evaluator, other_x_encrypted, w_encoded, true);
+        y_encrypted.sub_plain_inplace(evaluator, R_encoded);
+        if (mod_switch)
+            y_encrypted.mod_switch_to_next_inplace(evaluator);
 
-        std::stringstream m1_serialized;
-        m1_encrypted.save(m1_serialized, he);
+        std::stringstream y_serialized;
+        helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
 
-        send(ios, m1_serialized);
-        auto y_serialized = recv(ios);
-        auto y_encrypted  = helper.deserialize_outputs(evaluator, y_serialized);
+        std::stringstream received_y_serialized;
+        if (party == ALICE) {
+            send(ios, y_serialized);
+            received_y_serialized = recv(ios);
+        } else {
+            received_y_serialized = recv(ios);
+            send(ios, y_serialized);
+        }
 
+        auto other_y_encrypted = helper.deserialize_outputs(evaluator, received_y_serialized);
         vector<INT_TYPE> y_decrypted
-            = helper.decrypt_outputs_ring2k(encoder, decryptor, y_encrypted);
-        [[maybe_unused]] auto size
-            = apply_stride(c, y_decrypted.data(), stride, bs, ic, ih, iw, kh, kw, oc);
+            = helper.decrypt_outputs_ring2k(encoder, decryptor, other_y_encrypted);
+
+        add_inplace(y_decrypted, R, PLAIN_MOD);
+
+        size = bs * apply_stride(c, y_decrypted.data(), stride, batch_size, ic, ih, iw, kh, kw, oc, cur);
+        cur += batch_size;
+    }
 
 #ifdef VERIFY
+    if (party == ALICE) {
         std::cout << PURPLE << "Verifying CONV" << NC << "\n";
         size_t nh = (ih - kh) / stride + 1;
         size_t nw = (iw - kw) / stride + 1;
         std::cout << PURPLE << "[" << ic << ", " << ih << ", " << iw << "] x [" << ic << ", " << kh
                   << ", " << kw << "] = [" << oc << ", " << nh << ", " << nw << "]" << NC << "\n";
 
-        std::vector<INT_TYPE> w(oc * ic * kh * kw);
-        std::vector<INT_TYPE> R(bs * oc * nh * nw);
+        std::vector<INT_TYPE> x2(bs * ic * ih * iw);
+        std::vector<INT_TYPE> w2(oc * ic * kh * kw);
+        std::vector<INT_TYPE> c2(size);
 
-        ios[0]->recv_data(w.data(), w.size() * sizeof(INT_TYPE));
-        ios[0]->recv_data(R.data(), R.size() * sizeof(INT_TYPE));
+        ios[0]->recv_data(x2.data(), x2.size() * sizeof(INT_TYPE));
+        ios[0]->recv_data(w2.data(), w2.size() * sizeof(INT_TYPE));
+        ios[0]->recv_data(c2.data(), c2.size() * sizeof(INT_TYPE));
 
-        add_inplace(R, c, PLAIN_MOD);
+        add_inplace(x2, x, PLAIN_MOD); // A0 + A1
+        add_inplace(c2, c, PLAIN_MOD); // C0 + C1
+        add_inplace(w2, w, PLAIN_MOD); // B0 + B1
+
         vector<INT_TYPE> ideal
-            = ideal_conv(x, w.data(), PLAIN_MOD, bs, ic, ih, iw, kh, kw, oc, stride);
-        if (vector_equal(R, ideal)) {
+            = ideal_conv(x2.data(), w2.data(), PLAIN_MOD, bs, ic, ih, iw, kh, kw, oc, stride);
+        if (vector_equal(c2, ideal)) {
             std::cout << GREEN << "GPU-CONV: PASSED" << NC << "\n";
         } else {
             std::cout << RED << "GPU-CONV: FAILED" << NC << "\n";
         }
-#endif
     } else {
-        linear::Cipher2d a2_encrypted
-            = helper.encrypt_inputs_ring2k(encryptor, encoder, x, std::nullopt);
-
-        std::stringstream a2_serialized;
-        a2_encrypted.save(a2_serialized, he);
-
-        vector<INT_TYPE> R2 = random_polynomial(bs * oc * oh * ow);
-
-        linear::Plain2d w_encoded  = helper.encode_weights_ring2k(encoder, w, std::nullopt, false);
-        linear::Plain2d R2_encoded = helper.encode_outputs_ring2k(encoder, R2.data(), std::nullopt);
-
-        auto a1_serialized = recv(ios);
-        send(ios, a2_serialized);
-
-        auto a1_encrypted = linear::Cipher2d::load_new(a1_serialized, he);
-
-        linear::Cipher2d m2_encrypted = helper.conv2d(evaluator, a1_encrypted, w_encoded);
-        m2_encrypted.sub_plain_inplace(evaluator, R2_encoded);
-        if (mod_switch)
-            m2_encrypted.mod_switch_to_next_inplace(evaluator);
-
-        std::stringstream m2_serialized;
-        helper.serialize_outputs(evaluator, m2_encrypted, m2_serialized);
-
-        auto m1_serialized = recv(ios);
-        send(ios, m2_serialized);
-
-        [[maybe_unused]] auto size = apply_stride(c, R2.data(), stride, bs, ic, ih, iw, kh, kw, oc);
-#ifdef VERIFY
-        ios[0]->send_data(w, oc * ic * kw * kh * sizeof(INT_TYPE));
+        ios[0]->send_data(x, bs * ic * ih * iw * sizeof(INT_TYPE));
+        ios[0]->send_data(w, oc * ic * kh * kw * sizeof(INT_TYPE));
         ios[0]->send_data(c, size * sizeof(INT_TYPE));
         ios[0]->flush();
-#endif
     }
+#endif
 }
 
 std::vector<INT_TYPE> random_polynomial(size_t size, uint64_t max_value) {
