@@ -45,6 +45,7 @@ vector<INT_TYPE> ideal_conv(const INT_TYPE* x, const INT_TYPE* w, size_t t, size
 vector<INT_TYPE> random_polynomial(size_t size, uint64_t max_value = (1UL << 32));
 
 void add_inplace(std::vector<INT_TYPE>& a, const INT_TYPE* b, size_t t);
+inline void add_inplace(std::vector<INT_TYPE>& a, const std::vector<INT_TYPE>& b, size_t t) { add_inplace(a, b.data(), t); }
 size_t apply_stride(INT_TYPE* dest, const INT_TYPE* x, const size_t& stride, const size_t& bs,
                     const size_t& ic, const size_t& ih, const size_t& iw, const size_t& kh,
                     const size_t& kw, const size_t& oc, const size_t batch_offset = 0);
