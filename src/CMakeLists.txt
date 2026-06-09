@@ -35,20 +35,30 @@ target_include_directories(gemini PUBLIC
 ################################################################################
 set(HE_LIB HE)
 if(TRIPLE_GPU)
-    add_library(${HE_LIB} STATIC
+    set(HE_GPU_SOURCES
         core/hpmpc_interface.cpp
         core/utils.cpp
         io/send.cpp
         troy/conv2d_gpu.cu
     )
+    if(TRIPLE_FC_GPU)
+        list(APPEND HE_GPU_SOURCES troy/fc_gpu.cu)
+    endif()
+
+    add_library(${HE_LIB} STATIC ${HE_GPU_SOURCES})
 
     target_link_libraries(${HE_LIB} PUBLIC Troy::troy CUDA::cudart CUDA::cufft)
-    target_compile_definitions(${HE_LIB} PRIVATE USE_CONV_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE})
-    if(TRIPLE_GPU_REVERSE)
-        target_compile_definitions(${HE_LIB} PRIVATE USE_CONV_CUDA=1 REVERSE_GPU=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE})
-    else()
-        target_compile_definitions(${HE_LIB} PRIVATE USE_CONV_CUDA=1 REVERSE_GPU=0 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE})
+
+    set(_HE_DEFS USE_CONV_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE})
+    if(TRIPLE_FC_GPU)
+        list(APPEND _HE_DEFS USE_FC_CUDA=1)
     endif()
+    if(TRIPLE_GPU_REVERSE)
+        list(APPEND _HE_DEFS REVERSE_GPU=1)
+    else()
+        list(APPEND _HE_DEFS REVERSE_GPU=0)
+    endif()
+    target_compile_definitions(${HE_LIB} PRIVATE ${_HE_DEFS})
 else()
     add_library(${HE_LIB} STATIC
         core/hpmpc_interface.cpp
@@ -106,6 +116,9 @@ if(TRIPLE_COLOR)
 endif()
 if(TRIPLE_GPU)
     target_compile_definitions(${server} PRIVATE USE_CONV_CUDA=1)
+    if(TRIPLE_FC_GPU)
+        target_compile_definitions(${server} PRIVATE USE_FC_CUDA=1)
+    endif()
 endif()
 
 set(client cheetah_client)
@@ -123,6 +136,9 @@ if(TRIPLE_COLOR)
 endif()
 if(TRIPLE_GPU)
     target_compile_definitions(${client} PRIVATE USE_CONV_CUDA=1)
+    if(TRIPLE_FC_GPU)
+        target_compile_definitions(${client} PRIVATE USE_FC_CUDA=1)
+    endif()
 endif()
 
 message(STATUS "TRIPLE_VERIFY: ${TRIPLE_VERIFY}")
