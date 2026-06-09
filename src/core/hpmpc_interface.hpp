@@ -63,12 +63,12 @@ void generateArithTriplesCheetah(const UINT_TYPE a[], const UINT_TYPE b[], UINT_
 
 void generateFCTriplesCheetah(Keys<IO::NetIO>& keys, const UINT_TYPE* a, const UINT_TYPE* b,
                               UINT_TYPE* c, int batch, uint64_t com_dim, uint64_t dim2, int party,
-                              int threads, Utils::PROTO proto, int factor = 1);
+                              int threads, Utils::PROTO proto, int factor = 1, int gpu_id = 0);
 
 void generateConvTriplesCheetahWrapper(Keys<IO::NetIO>& keys, const UINT_TYPE* a,
                                        const UINT_TYPE* b, UINT_TYPE* c, Utils::ConvParm parm,
                                        int party, int threads, Utils::PROTO proto, int factor = 1,
-                                       bool is_shared_input = false);
+                                       bool is_shared_input = false, int gpu_id = 0);
 
 void generateConvTriplesCheetah(Keys<IO::NetIO>& keys, size_t total_batches,
                                 std::vector<Utils::ConvParm>& parms, UINT_TYPE** a, UINT_TYPE** b,

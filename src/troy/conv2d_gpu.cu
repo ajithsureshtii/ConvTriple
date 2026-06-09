@@ -5,6 +5,7 @@
 #include "conv2d_gpu.cuh"
 
 #include <troy/troy.h>
+#include <cuda_runtime.h>
 
 namespace TROY {
 
@@ -17,7 +18,8 @@ constexpr size_t MAX_BATCHSIZE = CONV_MAX_BATCH_SIZE;
 constexpr size_t MAX_BATCHSIZE = 16;
 #endif
 
-troy::HeContextPointer setup() {
+troy::HeContextPointer setup(int device_id) {
+    cudaSetDevice(device_id);
     using namespace troy;
     size_t poly_mod   = POLY_MOD;
     size_t plain_mod  = PLAIN_MOD;
@@ -36,7 +38,7 @@ troy::HeContextPointer setup() {
 
 void conv2d(IO::NetIO** ios, int party, const INT_TYPE* a, const INT_TYPE* b, INT_TYPE* c,
             size_t bs, size_t ic, size_t ih, size_t iw, size_t kh, size_t kw, size_t oc,
-            size_t stride, size_t padding, bool mod_switch, int factor, bool is_ab) {
+            size_t stride, size_t padding, bool mod_switch, int factor, bool is_ab, int device_id) {
     auto start = measure::now();
 
     vector<INT_TYPE> dest;
@@ -64,18 +66,18 @@ void conv2d(IO::NetIO** ios, int party, const INT_TYPE* a, const INT_TYPE* b, IN
 #if REVERSE_GPU == 0
         if (is_ab) {
             conv2d_ab(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch, ic, ih,
-                      iw, kh, kw, oc, stride, mod_switch);
+                      iw, kh, kw, oc, stride, mod_switch, device_id);
         } else {
             conv2d_ab2(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch, ic, ih,
-                       iw, kh, kw, oc, stride, mod_switch);
+                       iw, kh, kw, oc, stride, mod_switch, device_id);
         }
 #else
         if (is_ab) {
             conv2d_ab_reverse(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch,
-                              ic, ih, iw, kh, kw, oc, stride, mod_switch);
+                              ic, ih, iw, kh, kw, oc, stride, mod_switch, device_id);
         } else {
             conv2d_ab2_reverse(ios, party, ai + i_size * i, b + w_size * i, c + c_size * i, ac_batch,
-                               ic, ih, iw, kh, kw, oc, stride, mod_switch);
+                               ic, ih, iw, kh, kw, oc, stride, mod_switch, device_id);
         }
 #endif
     }
@@ -102,9 +104,9 @@ void conv2d_dummy(IO::NetIO** ios, int party, size_t bs, size_t ic, size_t ih, s
 
 void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, INT_TYPE* c,
                 size_t bs, size_t ic, size_t ih, size_t iw, size_t kh, size_t kw, size_t oc,
-                size_t stride, bool mod_switch) {
+                size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
-    auto he = setup();
+    auto he = setup(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     if (utils::device_count() > 0) {
         he->to_device_inplace();
@@ -229,9 +231,9 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
 
 void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, INT_TYPE* c,
                size_t bs, size_t ic, size_t ih, size_t iw, size_t kh, size_t kw, size_t oc,
-               size_t stride, bool mod_switch) {
+               size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
-    auto he = setup();
+    auto he = setup(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     if (utils::device_count() > 0) {
         he->to_device_inplace();
@@ -419,9 +421,9 @@ void add_inplace(std::vector<INT_TYPE>& a, const INT_TYPE* b, size_t t) {
 
 void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
                         INT_TYPE* c, size_t bs, size_t ic, size_t ih, size_t iw, size_t kh,
-                        size_t kw, size_t oc, size_t stride, bool mod_switch) {
+                        size_t kw, size_t oc, size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
-    auto he = setup();
+    auto he = setup(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     auto parmsid = encoder.context()->first_context_data_pointer()->parms_id();
     if (utils::device_count() > 0) {
@@ -523,9 +525,9 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
 
 void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
                        INT_TYPE* c, size_t bs, size_t ic, size_t ih, size_t iw, size_t kh,
-                       size_t kw, size_t oc, size_t stride, bool mod_switch) {
+                       size_t kw, size_t oc, size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
-    auto he = setup();
+    auto he = setup(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     auto parmsid = encoder.context()->first_context_data_pointer()->parms_id();
     if (utils::device_count() > 0) {

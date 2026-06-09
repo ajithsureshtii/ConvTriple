@@ -24,6 +24,10 @@
 #include "troy/conv2d_gpu.cuh"
 #endif
 
+#if USE_FC_CUDA
+#include "troy/fc_gpu.cuh"
+#endif
+
 #include "elem.hpp"
 
 constexpr uint64_t MAX_BOOL  = 1ULL << 20;
@@ -454,7 +458,28 @@ void generateArithTriplesCheetah(const UINT_TYPE a[], const UINT_TYPE b[], UINT_
 
 void generateFCTriplesCheetah(Keys<IO::NetIO>& keys, const UINT_TYPE* a, const UINT_TYPE* b,
                               UINT_TYPE* c, int batch, uint64_t com_dim, uint64_t dim2, int party,
-                              int threads, Utils::PROTO proto, int factor) {
+                              int threads, Utils::PROTO proto, int factor, int gpu_id) {
+#if USE_FC_CUDA
+    {
+        auto** ios = keys.get_ios(threads);
+        auto   gpu_start = measure::now();
+        TROY::fc(ios, OTHER_PARTY(party), a, b, c, batch, com_dim, dim2, factor,
+                 proto == Utils::PROTO::AB, gpu_id);
+        std::string unit;
+        double data_sent = 0, data_recv = 0;
+        for (int i = 0; i < threads; ++i) {
+            data_sent += Utils::to_MB(ios[i]->counter, unit);
+            data_recv += Utils::to_MB(ios[i]->recv_counter, unit);
+            ios[i]->counter = 0;
+            ios[i]->recv_counter = 0;
+        }
+        Utils::log(Utils::Level::INFO, "P", party - 1, ", PID", keys.get_io_offset(),
+                   ": FC triple GPU s PRE: ", Utils::to_sec(Utils::time_diff(gpu_start)),
+                   "   MB SENT: ", data_sent, "   MB RECEIVED: ", data_recv);
+        accumulateTripleStat("FC", data_sent, data_recv, Utils::to_sec(Utils::time_diff(gpu_start)));
+        return;
+    }
+#endif
     auto meta = Utils::init_meta_fc(com_dim, dim2);
     Utils::log(Utils::Level::INFO, "P", party - 1, ", PID", keys.get_io_offset(),
                ": Generating FC triples ", meta.input_shape, " x ",
@@ -522,12 +547,12 @@ void generateFCTriplesCheetah(Keys<IO::NetIO>& keys, const UINT_TYPE* a, const U
 void generateConvTriplesCheetahWrapper(Keys<IO::NetIO>& keys, const UINT_TYPE* a,
                                        const UINT_TYPE* b, UINT_TYPE* c, Utils::ConvParm parm,
                                        int party, int threads, Utils::PROTO proto, int factor,
-                                       bool is_shared_input) {
+                                       bool is_shared_input, int gpu_id) {
 #if USE_CONV_CUDA
     if (proto == Utils::PROTO::AB2 || proto == Utils::PROTO::AB) {
         TROY::conv2d(keys.get_ios(threads), OTHER_PARTY(party), a, b, c, parm.batchsize, parm.ic,
                      parm.ih, parm.iw, parm.fh, parm.fw, parm.n_filters, parm.stride, parm.padding,
-                     true, factor, proto == Utils::PROTO::AB);
+                     true, factor, proto == Utils::PROTO::AB, gpu_id);
         return;
     }
 #endif
