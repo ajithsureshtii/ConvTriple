@@ -610,3 +610,30 @@ index e29b117..e67d600 100644
  
      bench::conv2d::BenchmarkConv2d benchmark(args);
      bool success = benchmark.test_conv2d();
+
+diff --git a/src/utils/memory_pool.h b/src/utils/memory_pool.h
+--- a/src/utils/memory_pool.h
++++ b/src/utils/memory_pool.h
+@@ -73,7 +73,9 @@ namespace troy {namespace utils {
+                 has_device = count > 0;
+                 if (!has_device) {
+                     return;
+                 }
+-                global_pool = std::make_shared<MemoryPool>(0);
++                int current_device = 0;
++                cudaGetDevice(&current_device);
++                global_pool = std::make_shared<MemoryPool>(current_device);
+                 global_pool->is_global_pool = true;
+                 established = true;
+             }
+
+diff --git a/src/app/matmul.cu b/src/app/matmul.cu
+--- a/src/app/matmul.cu
++++ b/src/app/matmul.cu
+@@ -291,6 +291,7 @@ namespace troy { namespace linear {
+         } else {
+             if (!out_cipher->data()[0][0].is_ntt_form()) {
++                out_cipher->expand_seed(encoder.context());
+                 Cipher2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_cipher, out, false);
+                 *out_cipher = std::move(out);
+             }
