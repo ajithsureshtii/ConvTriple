@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 GPU_ARCH=${GPU_ARCHITECTURE:-"75"}
 

@@ -634,6 +634,6 @@ diff --git a/src/app/matmul.cu b/src/app/matmul.cu
          } else {
              if (!out_cipher->data()[0][0].is_ntt_form()) {
 +                out_cipher->expand_seed(encoder.context());
-                 Cipher2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_cipher, out, false);
+                 Cipher2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_cipher, out, false); // centralize does not have effect here.
                  *out_cipher = std::move(out);
              }
