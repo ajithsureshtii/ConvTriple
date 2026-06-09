@@ -143,7 +143,7 @@ if(TRIPLE_GPU)
     # Standalone GPU triple test binaries (built only with TRIPLE_GPU=ON)
     add_executable(conv_triple_gpu_test conv_triple_gpu_test.cu)
     target_link_libraries(conv_triple_gpu_test PRIVATE ${HE_LIB}
-        Troy::troy CUDA::cudart emp-tool::emp-tool OpenSSL::SSL OpenSSL::Crypto)
+        Troy::troy CUDA::cudart OpenSSL::SSL OpenSSL::Crypto)
     target_include_directories(conv_triple_gpu_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(conv_triple_gpu_test PRIVATE
         USE_CONV_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE}
@@ -151,7 +151,7 @@ if(TRIPLE_GPU)
 
     add_executable(fc_triple_gpu_test fc_triple_gpu_test.cu)
     target_link_libraries(fc_triple_gpu_test PRIVATE ${HE_LIB}
-        Troy::troy CUDA::cudart emp-tool::emp-tool OpenSSL::SSL OpenSSL::Crypto)
+        Troy::troy CUDA::cudart OpenSSL::SSL OpenSSL::Crypto)
     target_include_directories(fc_triple_gpu_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(fc_triple_gpu_test PRIVATE
         USE_CONV_CUDA=1 USE_FC_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE}
