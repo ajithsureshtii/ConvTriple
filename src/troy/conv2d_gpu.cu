@@ -238,6 +238,7 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
         ios[0]->flush();
     }
 #endif
+    troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab2 END", device_id);
 }
 
@@ -363,6 +364,7 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
         ios[0]->flush();
     }
 #endif
+    troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab END", device_id);
 }
 
@@ -538,6 +540,7 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
         ios[0]->flush();
     }
 #endif
+    troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab2_reverse END", device_id);
 }
 
@@ -681,6 +684,7 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
         ios[0]->flush();
     }
 #endif
+    troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab_reverse END", device_id);
 }
 
