@@ -116,6 +116,7 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
                 size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
     log_gpu_mem("conv2d_ab2 START", device_id);
+    {
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -238,6 +239,7 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
         ios[0]->flush();
     }
 #endif
+    } // all troy objects destroyed here, releasing back to GlobalPool's unused
     troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab2 END", device_id);
 }
@@ -247,6 +249,7 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
                size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
     log_gpu_mem("conv2d_ab START", device_id);
+    {
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -364,6 +367,7 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
         ios[0]->flush();
     }
 #endif
+    } // all troy objects destroyed here
     troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab END", device_id);
 }
@@ -441,6 +445,7 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
                         size_t kw, size_t oc, size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
     log_gpu_mem("conv2d_ab2_reverse START", device_id);
+    {
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -540,6 +545,7 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
         ios[0]->flush();
     }
 #endif
+    } // all troy objects destroyed here
     troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab2_reverse END", device_id);
 }
@@ -549,6 +555,7 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
                        size_t kw, size_t oc, size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
     log_gpu_mem("conv2d_ab_reverse START", device_id);
+    {
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -684,6 +691,7 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
         ios[0]->flush();
     }
 #endif
+    } // all troy objects destroyed here
     troy::MemoryPool::ReleaseUnused();
     log_gpu_mem("conv2d_ab_reverse END", device_id);
 }
