@@ -102,10 +102,20 @@ void conv2d_dummy(IO::NetIO** ios, int party, size_t bs, size_t ic, size_t ih, s
            mod_switch);
 }
 
+static void log_gpu_mem(const char* tag, int device_id) {
+    cudaSetDevice(device_id);
+    size_t free_bytes = 0, total_bytes = 0;
+    cudaMemGetInfo(&free_bytes, &total_bytes);
+    fprintf(stderr, "[GPU%d MEM %s] free=%.1f MB total=%.1f MB\n",
+            device_id, tag,
+            free_bytes / 1048576.0, total_bytes / 1048576.0);
+}
+
 void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, INT_TYPE* c,
                 size_t bs, size_t ic, size_t ih, size_t iw, size_t kh, size_t kw, size_t oc,
                 size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
+    log_gpu_mem("conv2d_ab2 START", device_id);
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -228,12 +238,14 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
         ios[0]->flush();
     }
 #endif
+    log_gpu_mem("conv2d_ab2 END", device_id);
 }
 
 void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, INT_TYPE* c,
                size_t bs, size_t ic, size_t ih, size_t iw, size_t kh, size_t kw, size_t oc,
                size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
+    log_gpu_mem("conv2d_ab START", device_id);
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -351,6 +363,7 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
         ios[0]->flush();
     }
 #endif
+    log_gpu_mem("conv2d_ab END", device_id);
 }
 
 std::vector<INT_TYPE> random_polynomial(size_t size, uint64_t max_value) {
@@ -425,6 +438,7 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
                         INT_TYPE* c, size_t bs, size_t ic, size_t ih, size_t iw, size_t kh,
                         size_t kw, size_t oc, size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
+    log_gpu_mem("conv2d_ab2_reverse START", device_id);
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -524,12 +538,14 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
         ios[0]->flush();
     }
 #endif
+    log_gpu_mem("conv2d_ab2_reverse END", device_id);
 }
 
 void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
                        INT_TYPE* c, size_t bs, size_t ic, size_t ih, size_t iw, size_t kh,
                        size_t kw, size_t oc, size_t stride, bool mod_switch, int device_id) {
     using namespace troy;
+    log_gpu_mem("conv2d_ab_reverse START", device_id);
     auto he = setup(device_id);
     MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
@@ -665,6 +681,7 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
         ios[0]->flush();
     }
 #endif
+    log_gpu_mem("conv2d_ab_reverse END", device_id);
 }
 
 } // namespace TROY
