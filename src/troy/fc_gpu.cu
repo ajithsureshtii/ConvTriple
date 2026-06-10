@@ -20,22 +20,23 @@ void fc_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, IN
             size_t batch, size_t in_dim, size_t out_dim, int device_id) {
     using namespace troy;
     auto he = setup(device_id);
+    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     if (utils::device_count() > 0) {
-        he->to_device_inplace();
-        encoder.to_device_inplace();
+        he->to_device_inplace(pool);
+        encoder.to_device_inplace(pool);
     } else {
         std::cerr << RED << "FC: Couldn't find a GPU" << NC << "\n";
     }
 
     linear::MatmulHelper helper(batch, in_dim, out_dim, POLY_MOD,
-                                linear::MatmulObjective::EncryptLeft, /*pack_lwe=*/false);
+                                linear::MatmulObjective::EncryptLeft, /*pack_lwe=*/false, pool);
 
-    KeyGenerator keygen(he);
+    KeyGenerator keygen(he, pool);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key());
+    encryptor.set_secret_key(keygen.secret_key(), pool);
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key());
+    Decryptor decryptor(he, keygen.secret_key(), pool);
 
     // BOB pre-encodes its weight matrix once (NTT on GPU)
     linear::Plain2d w_encoded;
@@ -80,11 +81,11 @@ void fc_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, IN
         if (x) {
             linear::Plain2d x_encoded
                 = helper.encode_inputs_ring2k(encoder, x, std::nullopt, true);
-            x_encrypted.add_plain_inplace(evaluator, x_encoded);
+            x_encrypted.add_plain_inplace(evaluator, x_encoded, pool);
         }
 
         linear::Cipher2d y_encrypted = helper.matmul(evaluator, x_encrypted, w_encoded);
-        y_encrypted.sub_plain_inplace(evaluator, R_encoded);
+        y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
 
         std::stringstream y_serialized;
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -102,23 +103,24 @@ void fc_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYP
                     size_t batch, size_t in_dim, size_t out_dim, int device_id) {
     using namespace troy;
     auto he = setup(device_id);
+    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     auto parmsid = encoder.context()->first_context_data_pointer()->parms_id();
     if (utils::device_count() > 0) {
-        he->to_device_inplace();
-        encoder.to_device_inplace();
+        he->to_device_inplace(pool);
+        encoder.to_device_inplace(pool);
     } else {
         std::cerr << RED << "FC: Couldn't find a GPU" << NC << "\n";
     }
 
     linear::MatmulHelper helper(batch, in_dim, out_dim, POLY_MOD,
-                                linear::MatmulObjective::EncryptRight, /*pack_lwe=*/false);
+                                linear::MatmulObjective::EncryptRight, /*pack_lwe=*/false, pool);
 
-    KeyGenerator keygen(he);
+    KeyGenerator keygen(he, pool);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key());
+    encryptor.set_secret_key(keygen.secret_key(), pool);
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key());
+    Decryptor decryptor(he, keygen.secret_key(), pool);
 
     // BOB encrypts weight and sends first
     linear::Cipher2d w_encrypted;
@@ -155,7 +157,7 @@ void fc_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYP
 
         linear::Cipher2d y_encrypted
             = helper.matmul_reverse(evaluator, x_encoded, w_encrypted);
-        y_encrypted.sub_plain_inplace(evaluator, R_encoded);
+        y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
 
         std::stringstream y_serialized;
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -174,22 +176,23 @@ void fc_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, INT
            size_t batch, size_t in_dim, size_t out_dim, int device_id) {
     using namespace troy;
     auto he = setup(device_id);
+    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     if (utils::device_count() > 0) {
-        he->to_device_inplace();
-        encoder.to_device_inplace();
+        he->to_device_inplace(pool);
+        encoder.to_device_inplace(pool);
     } else {
         std::cerr << RED << "FC: Couldn't find a GPU" << NC << "\n";
     }
 
     linear::MatmulHelper helper(batch, in_dim, out_dim, POLY_MOD,
-                                linear::MatmulObjective::EncryptLeft, /*pack_lwe=*/false);
+                                linear::MatmulObjective::EncryptLeft, /*pack_lwe=*/false, pool);
 
-    KeyGenerator keygen(he);
+    KeyGenerator keygen(he, pool);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key());
+    encryptor.set_secret_key(keygen.secret_key(), pool);
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key());
+    Decryptor decryptor(he, keygen.secret_key(), pool);
 
     // Each party pre-encodes its own weight share (NTT on GPU)
     auto ntt      = measure::now();
@@ -221,7 +224,7 @@ void fc_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w, INT
 
     // Compute: matmul(other_x, own_w) - R
     linear::Cipher2d y_encrypted = helper.matmul(evaluator, other_x_encrypted, w_encoded);
-    y_encrypted.sub_plain_inplace(evaluator, R_encoded);
+    y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
 
     std::stringstream y_serialized;
     helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -279,23 +282,24 @@ void fc_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE
                    size_t batch, size_t in_dim, size_t out_dim, int device_id) {
     using namespace troy;
     auto he = setup(device_id);
+    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     auto parmsid = encoder.context()->first_context_data_pointer()->parms_id();
     if (utils::device_count() > 0) {
-        he->to_device_inplace();
-        encoder.to_device_inplace();
+        he->to_device_inplace(pool);
+        encoder.to_device_inplace(pool);
     } else {
         std::cerr << RED << "FC: Couldn't find a GPU" << NC << "\n";
     }
 
     linear::MatmulHelper helper(batch, in_dim, out_dim, POLY_MOD,
-                                linear::MatmulObjective::EncryptRight, /*pack_lwe=*/false);
+                                linear::MatmulObjective::EncryptRight, /*pack_lwe=*/false, pool);
 
-    KeyGenerator keygen(he);
+    KeyGenerator keygen(he, pool);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key());
+    encryptor.set_secret_key(keygen.secret_key(), pool);
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key());
+    Decryptor decryptor(he, keygen.secret_key(), pool);
 
     // Each party encrypts its own weight share
     linear::Cipher2d w_encrypted
@@ -325,7 +329,7 @@ void fc_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE
     // Compute: matmul_reverse(own_x, other_w) - R
     linear::Cipher2d y_encrypted
         = helper.matmul_reverse(evaluator, x_encoded, other_w_encrypted);
-    y_encrypted.sub_plain_inplace(evaluator, R_encoded);
+    y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
 
     std::stringstream y_serialized;
     helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
