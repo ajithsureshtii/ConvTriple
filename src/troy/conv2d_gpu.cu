@@ -118,11 +118,10 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
     log_gpu_mem("conv2d_ab2 START", device_id);
     {
     auto he = setup(device_id);
-    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     if (utils::device_count() > 0) {
-        he->to_device_inplace(pool);
-        encoder.to_device_inplace(pool);
+        he->to_device_inplace();
+        encoder.to_device_inplace();
     } else {
         std::cerr << RED << "Couldn't find a GPU" << NC << "\n";
     }
@@ -131,13 +130,13 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
     size_t ow = iw - kw + 1;
 
     linear::Conv2dHelper helper_enc(bs, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptLeft, pool);
+                                    linear::MatmulObjective::EncryptLeft);
 
-    KeyGenerator keygen(he, pool);
+    KeyGenerator keygen(he);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key(), pool);
+    encryptor.set_secret_key(keygen.secret_key());
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key(), pool);
+    Decryptor decryptor(he, keygen.secret_key());
 
     vector<INT_TYPE> R = random_polynomial(bs * oc * oh * ow);
 
@@ -155,7 +154,7 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
     for (size_t cur = 0; cur < bs;) {
         auto batch_size = std::min(bs - cur, MAX_BATCHSIZE);
         linear::Conv2dHelper helper(batch_size, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptLeft, pool);
+                                    linear::MatmulObjective::EncryptLeft);
         auto x_offset = ih * iw * ic * cur;
         auto r_offset = oh * ow * oc * cur;
 
@@ -185,12 +184,12 @@ void conv2d_ab2(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w
             auto x_encrypted = linear::Cipher2d::load_new(stream, he);
 
             if (x)
-                x_encrypted.add_plain_inplace(evaluator, x_encoded, pool);
+                x_encrypted.add_plain_inplace(evaluator, x_encoded);
 
             linear::Cipher2d y_encrypted = helper.conv2d(evaluator, x_encrypted, w_encoded, true);
-            y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
+            y_encrypted.sub_plain_inplace(evaluator, R_encoded);
             if (mod_switch)
-                y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+                y_encrypted.mod_switch_to_next_inplace(evaluator);
 
             std::stringstream y_serialized;
             helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -251,11 +250,10 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
     log_gpu_mem("conv2d_ab START", device_id);
     {
     auto he = setup(device_id);
-    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     if (utils::device_count() > 0) {
-        he->to_device_inplace(pool);
-        encoder.to_device_inplace(pool);
+        he->to_device_inplace();
+        encoder.to_device_inplace();
     } else {
         std::cerr << RED << "Couldn't find a GPU" << NC << "\n";
     }
@@ -264,13 +262,13 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
     size_t ow = iw - kw + 1;
 
     linear::Conv2dHelper helper_enc(bs, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptLeft, pool);
+                                    linear::MatmulObjective::EncryptLeft);
 
-    KeyGenerator keygen(he, pool);
+    KeyGenerator keygen(he);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key(), pool);
+    encryptor.set_secret_key(keygen.secret_key());
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key(), pool);
+    Decryptor decryptor(he, keygen.secret_key());
 
     auto ntt = measure::now();
     linear::Plain2d w_encoded
@@ -283,7 +281,7 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
     for (size_t cur = 0; cur < bs;) {
         auto batch_size = std::min(bs - cur, MAX_BATCHSIZE);
         linear::Conv2dHelper helper(batch_size, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptLeft, pool);
+                                    linear::MatmulObjective::EncryptLeft);
         auto x_offset = ih * iw * ic * cur;
 
         vector<INT_TYPE> R = random_polynomial(batch_size * oc * oh * ow);
@@ -307,9 +305,9 @@ void conv2d_ab(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_TYPE* w,
         auto other_x_encrypted = linear::Cipher2d::load_new(received_x_serialized, he);
 
         linear::Cipher2d y_encrypted = helper.conv2d(evaluator, other_x_encrypted, w_encoded, true);
-        y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
+        y_encrypted.sub_plain_inplace(evaluator, R_encoded);
         if (mod_switch)
-            y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+            y_encrypted.mod_switch_to_next_inplace(evaluator);
 
         std::stringstream y_serialized;
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -447,12 +445,11 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
     log_gpu_mem("conv2d_ab2_reverse START", device_id);
     {
     auto he = setup(device_id);
-    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     auto parmsid = encoder.context()->first_context_data_pointer()->parms_id();
     if (utils::device_count() > 0) {
-        he->to_device_inplace(pool);
-        encoder.to_device_inplace(pool);
+        he->to_device_inplace();
+        encoder.to_device_inplace();
     } else {
         std::cout << RED << "Couldn't find a GPU" << NC << "\n";
     }
@@ -461,13 +458,13 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
     size_t ow = iw - kw + 1;
 
     linear::Conv2dHelper helper_enc(bs, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptRight, pool);
+                                    linear::MatmulObjective::EncryptRight);
 
-    KeyGenerator keygen(he, pool);
+    KeyGenerator keygen(he);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key(), pool);
+    encryptor.set_secret_key(keygen.secret_key());
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key(), pool);
+    Decryptor decryptor(he, keygen.secret_key());
 
     linear::Cipher2d w_encrypted;
     if (party == BOB) {
@@ -484,7 +481,7 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
     for (size_t cur = 0; cur < bs;) {
         auto batch_size = std::min(bs - cur, MAX_BATCHSIZE);
         linear::Conv2dHelper helper(batch_size, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptLeft, pool);
+                                    linear::MatmulObjective::EncryptLeft);
         auto x_offset = ih * iw * ic * cur;
 
         if (party == BOB) {
@@ -504,9 +501,9 @@ void conv2d_ab2_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT
             linear::Plain2d R_encoded = helper.encode_outputs_ring2k(encoder, R.data(), parmsid);
 
             linear::Cipher2d y_encrypted = helper.conv2d_reverse(evaluator, x_encoded, w_encrypted);
-            y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
+            y_encrypted.sub_plain_inplace(evaluator, R_encoded);
             if (mod_switch)
-                y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+                y_encrypted.mod_switch_to_next_inplace(evaluator);
 
             std::stringstream y_serialized;
             helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -557,12 +554,11 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
     log_gpu_mem("conv2d_ab_reverse START", device_id);
     {
     auto he = setup(device_id);
-    MemoryPoolHandle pool = MemoryPool::create(device_id);
     linear::PolynomialEncoderRing2k<INT_TYPE> encoder(he, BIT_LEN);
     auto parmsid = encoder.context()->first_context_data_pointer()->parms_id();
     if (utils::device_count() > 0) {
-        he->to_device_inplace(pool);
-        encoder.to_device_inplace(pool);
+        he->to_device_inplace();
+        encoder.to_device_inplace();
     } else {
         std::cout << RED << "Couldn't find a GPU" << NC << "\n";
     }
@@ -571,13 +567,13 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
     size_t ow = iw - kw + 1;
 
     linear::Conv2dHelper helper_enc(bs, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptRight, pool);
+                                    linear::MatmulObjective::EncryptRight);
 
-    KeyGenerator keygen(he, pool);
+    KeyGenerator keygen(he);
     Encryptor encryptor(he);
-    encryptor.set_secret_key(keygen.secret_key(), pool);
+    encryptor.set_secret_key(keygen.secret_key());
     Evaluator evaluator(he);
-    Decryptor decryptor(he, keygen.secret_key(), pool);
+    Decryptor decryptor(he, keygen.secret_key());
 
     linear::Cipher2d w_encrypted;
     w_encrypted = helper_enc.encrypt_weights_ring2k(encryptor, encoder, w, std::nullopt);
@@ -598,7 +594,7 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
     for (size_t cur = 0; cur < bs;) {
         auto batch_size = std::min(bs - cur, MAX_BATCHSIZE);
         linear::Conv2dHelper helper(batch_size, ic, oc, ih, iw, kh, kw, POLY_MOD,
-                                    linear::MatmulObjective::EncryptLeft, pool);
+                                    linear::MatmulObjective::EncryptLeft);
         auto x_offset = ih * iw * ic * cur;
 
         if (party == BOB) {
@@ -609,9 +605,9 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
             linear::Plain2d R_encoded = helper.encode_outputs_ring2k(encoder, R.data(), parmsid);
 
             linear::Cipher2d y_encrypted = helper.conv2d_reverse(evaluator, x_encoded, w_encrypted);
-            y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
+            y_encrypted.sub_plain_inplace(evaluator, R_encoded);
             if (mod_switch)
-                y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+                y_encrypted.mod_switch_to_next_inplace(evaluator);
 
             std::stringstream y_serialized;
             helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
@@ -637,9 +633,9 @@ void conv2d_ab_reverse(IO::NetIO** ios, int party, const INT_TYPE* x, const INT_
             linear::Plain2d R_encoded = helper.encode_outputs_ring2k(encoder, R.data(), parmsid);
 
             linear::Cipher2d y_encrypted = helper.conv2d_reverse(evaluator, x_encoded, w_encrypted);
-            y_encrypted.sub_plain_inplace(evaluator, R_encoded, pool);
+            y_encrypted.sub_plain_inplace(evaluator, R_encoded);
             if (mod_switch)
-                y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+                y_encrypted.mod_switch_to_next_inplace(evaluator);
 
             std::stringstream y_serialized;
             helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
