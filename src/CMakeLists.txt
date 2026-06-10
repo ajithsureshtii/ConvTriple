@@ -149,13 +149,15 @@ if(TRIPLE_GPU)
         USE_CONV_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE}
         LOGLEVEL=${TRIPLE_LOG_LEVEL} PRG_SEED=${TRIPLE_SEED} TRIPLE_BITLEN=${TRIPLE_BITLEN})
 
-    add_executable(fc_triple_gpu_test fc_triple_gpu_test.cu)
-    target_link_libraries(fc_triple_gpu_test PRIVATE ${HE_LIB}
-        Troy::troy CUDA::cudart OpenSSL::SSL OpenSSL::Crypto)
-    target_include_directories(fc_triple_gpu_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_compile_definitions(fc_triple_gpu_test PRIVATE
-        USE_CONV_CUDA=1 USE_FC_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE}
-        LOGLEVEL=${TRIPLE_LOG_LEVEL} PRG_SEED=${TRIPLE_SEED} TRIPLE_BITLEN=${TRIPLE_BITLEN})
+    if(TRIPLE_FC_GPU)
+        add_executable(fc_triple_gpu_test fc_triple_gpu_test.cu)
+        target_link_libraries(fc_triple_gpu_test PRIVATE ${HE_LIB}
+            Troy::troy CUDA::cudart OpenSSL::SSL OpenSSL::Crypto)
+        target_include_directories(fc_triple_gpu_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        target_compile_definitions(fc_triple_gpu_test PRIVATE
+            USE_CONV_CUDA=1 USE_FC_CUDA=1 CONV_MAX_BATCH_SIZE=${CONV_MAX_BATCH_SIZE}
+            LOGLEVEL=${TRIPLE_LOG_LEVEL} PRG_SEED=${TRIPLE_SEED} TRIPLE_BITLEN=${TRIPLE_BITLEN})
+    endif()
 endif()
 
 message(STATUS "TRIPLE_VERIFY: ${TRIPLE_VERIFY}")
